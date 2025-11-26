@@ -1,3 +1,12 @@
+import requests
+import random
+import string
+from config import SHORT_URL, SHORT_API, MESSAGES
+from pyrogram import Client, filters
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, InputMediaPhoto
+from pyrogram.errors.pyromod import ListenerTimeout
+from helper.helper_func import force_sub, encode, check_verification_access
+
 @Client.on_message(filters.private & filters.command('batch'))
 async def batch(client: Client, message: Message):
     if message.from_user.id not in client.admins:
