@@ -34,11 +34,6 @@ async def start_command(client: Client, message: Message):
             original_payload = text.split(" ", 1)[1]
             base64_string = original_payload
 
-            is_short_link = False
-            if base64_string.startswith("yu3elk"):
-                base64_string = base64_string[6:-1]
-                is_short_link = True
-
         except IndexError:
             return await message.reply("Invalid command format.")
 
@@ -49,9 +44,9 @@ async def start_command(client: Client, message: Message):
         shortner_enabled = getattr(client, 'shortner_enabled', True)
 
         # 5. If user is not premium AND shortner is enabled, send short URL and return
-        if not is_user_pro and user_id != OWNER_ID and not is_short_link and shortner_enabled:
+        if not is_user_pro and user_id != OWNER_ID and shortner_enabled:
             try:
-                short_link = get_short(f"https://t.me/{client.username}?start=yu3elk{base64_string}7", client)
+                short_link = get_short(f"https://t.me/{client.username}?start={base64_string}", client)
             except Exception as e:
                 client.LOGGER(__name__, client.name).warning(f"Shortener failed: {e}")
                 return await message.reply("Couldn't generate short link.")
@@ -401,5 +396,4 @@ async def my_plan(client: Client, message: Message):
             "🔸 Request: Disabled\n\n"
             "🔓 Unlock Premium to get more benefits\n"
             "Contact: @GetoPro"
-            )
-                    
+        )
