@@ -744,27 +744,35 @@ class MongoDB:
 
     # ✅ VERIFICATION FUNCTIONS
 
-    async def set_user_verify_status(self, user_id: int, verify1_expiry: int = None, verify2_expiry: int = None, current_step: str = None):
-        """Set user's verification expiry times and current step"""
+    async def set_user_verify_status(self, user_id: int, verify1_expiry: int = None, verify2_start_time: int = None, verify2_expiry: int = None, last_verified_step: int = 0):
+        """
+        Updated verification status function with proper dual verification state machine
+        Sets verify1_expiry, verify2_start_time, verify2_expiry, and last_verified_step
+        """
         await self.user_data.update_one(
             {'_id': user_id},
             {'$set': {
                 'verify1_expiry': verify1_expiry,
+                'verify2_start_time': verify2_start_time,
                 'verify2_expiry': verify2_expiry,
-                'last_verified_step': current_step or 'none'
+                'last_verified_step': last_verified_step
             }},
             upsert=True
         )
 
     async def get_user_verify_status(self, user_id: int):
-        """Get user's verification status"""
+        """
+        Enhanced to return all verification fields including verify2_start_time
+        Get user's complete verification status for state machine
+        """
         doc = await self.user_data.find_one({'_id': user_id})
         if not doc:
             return None
         return {
             'verify1_expiry': doc.get('verify1_expiry'),
+            'verify2_start_time': doc.get('verify2_start_time'),
             'verify2_expiry': doc.get('verify2_expiry'),
-            'last_verified_step': doc.get('last_verified_step', 'none')
+            'last_verified_step': doc.get('last_verified_step', 0)
         }
 
     async def store_file_verification_image(self, file_token: str, image_url: str):
