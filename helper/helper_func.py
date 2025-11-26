@@ -498,3 +498,94 @@ async def batch_auto_del_notification(bot_username, messages, delay_time, transf
             await notification_msg.edit_text(f"<b>Pʀᴇᴠɪᴏᴜs Mᴇssᴀɢᴇ ᴡᴀs Dᴇʟᴇᴛᴇᴅ</b>")
     except Exception as e:
         print(f"Error updating notification message: {e}")
+
+#===============================================================#
+async def check_verification_access(client, user_id, current_time: int = None):
+    """
+    Implements the correct dual verification state machine.
+    
+    Returns tuple: (should_allow_access, verification_type_to_show)
+    verification_type_to_show: None (allow), 1 (show verify1), 2 (show verify2)
+    """
+    import time
+    if current_time is None:
+        current_time = int(time.time())
+    
+    # Get verification settings
+    verify1_enabled = getattr(client, 'verify1_mode', True)
+    verify2_enabled = getattr(client, 'verify2_mode', False)
+    
+    # If no verification is enabled, allow access
+    if not verify1_enabled and not verify2_enabled:
+        return True, None
+    
+    # If only verify1 is enabled (no dual verification)
+    if verify1_enabled and not verify2_enabled:
+        verify_status = await client.mongodb.get_user_verify_status(user_id)
+        if not verify_status or not verify_status.get('verify1_expiry'):
+            # User has never verified or verify1_expiry not set
+            return False, 1
+        
+        # Check if verify1 has expired
+        if current_time < verify_status['verify1_expiry']:
+            # Verification still valid
+            return True, None
+        else:
+            # Verification expired, need to verify again
+            return False, 1
+    
+    # Dual verification is enabled
+    if verify1_enabled and verify2_enabled:
+        verify_status = await client.mongodb.get_user_verify_status(user_id)
+        last_verified_step = verify_status.get('last_verified_step', 0) if verify_status else 0
+        
+        if last_verified_step == 0:
+            # User has never verified
+            return False, 1
+        
+        elif last_verified_step == 1:
+            # User completed verify1, check if in window for verify1 and verify2_start
+            verify1_expiry = verify_status.get('verify1_expiry')
+            verify2_start_time = verify_status.get('verify2_start_time')
+            
+            if not verify1_expiry:
+                # Verification1 data corrupted, restart
+                return False, 1
+            
+            # Check if verify1 has expired
+            if current_time >= verify1_expiry:
+                # Verify1 expired, must show verify1 again
+                return False, 1
+            
+            # Verify1 still valid, check if verify2 should start
+            if current_time < verify2_start_time:
+                # Still in gap time after verify1, allow access
+                return True, None
+            else:
+                # Gap time expired, must show verify2
+                return False, 2
+        
+        elif last_verified_step == 2:
+            # User completed verify2, check verify2 expiry
+            verify2_expiry = verify_status.get('verify2_expiry')
+            
+            if not verify2_expiry:
+                # Verification2 data corrupted, restart
+                return False, 1
+            
+            # Check if verify2 has expired
+            if current_time < verify2_expiry:
+                # Verification2 still valid, allow access
+                return True, None
+            else:
+                # Verification2 expired, restart from verify1
+                return False, 1
+        
+        else:
+            # Unknown state, restart verification
+            return False, 1
+    
+    # Fallback
+    return False, 1
+
+#===============================================================#
