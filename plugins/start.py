@@ -6,6 +6,7 @@ from config import MSG_EFFECT, OWNER_ID
 from plugins.shortner import get_short
 from helper.helper_func import get_messages, force_sub, decode, batch_auto_del_notification
 import asyncio
+import time  # Import time for current timestamp
 
 #===============================================================#
 
@@ -203,6 +204,69 @@ async def start_command(client: Client, message: Message):
         if not messages:
             return await temp_msg.edit("Couldn't find the files in the database.")
         await temp_msg.delete()
+
+        # Check if verification is required and handle accordingly
+        current_time = int(time.time())
+        
+        # Check verification access
+        should_allow, verification_needed = await check_verification_access(client, user_id, current_time)
+        
+        if not should_allow:
+            if verification_needed == 1:
+                # Show verification1
+                verify1_image = await client.mongodb.get_file_verification_image(base64_string)
+                if not verify1_image:
+                    verify1_image = getattr(client, 'default_verification_image', '')
+                
+                if verify1_image:
+                    await message.reply_photo(
+                        photo=verify1_image,
+                        caption="**Verification Required - Step 1**\n\nComplete the verification to access files."
+                    )
+                else:
+                    await message.reply("**Verification Required - Step 1**\n\nPlease complete the verification to access files.")
+                
+                verify_time_1 = getattr(client, 'verify_time_1', 60)
+                gap_time = getattr(client, 'gap_time', 300)
+                
+                verify1_expiry = current_time + verify_time_1
+                verify2_start_time = current_time + gap_time
+                
+                await client.mongodb.set_user_verify_status(
+                    user_id,
+                    verify1_expiry=verify1_expiry,
+                    verify2_start_time=verify2_start_time,
+                    verify2_expiry=None,
+                    last_verified_step=1
+                )
+                return
+            
+            elif verification_needed == 2:
+                # Show verification2
+                verify2_image = await client.mongodb.get_file_verification_image(base64_string)
+                if not verify2_image:
+                    verify2_image = getattr(client, 'default_verification_image', '')
+                
+                if verify2_image:
+                    await message.reply_photo(
+                        photo=verify2_image,
+                        caption="**Verification Required - Step 2**\n\nComplete the second verification to access files."
+                    )
+                else:
+                    await message.reply("**Verification Required - Step 2**\n\nPlease complete the second verification to access files.")
+                
+                verify_time_2 = getattr(client, 'verify_time_2', 60)
+                
+                verify2_expiry = current_time + verify_time_2
+                
+                await client.mongodb.set_user_verify_status(
+                    user_id,
+                    verify1_expiry=None,
+                    verify2_start_time=None,
+                    verify2_expiry=verify2_expiry,
+                    last_verified_step=2
+                )
+                return
 
         yugen_msgs = []
         for msg in messages:
